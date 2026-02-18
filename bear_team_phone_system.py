@@ -272,8 +272,8 @@ Always be warm, professional, and helpful. Bear Team Real Estate serves all of O
 
         try:
             response = anthropic_client.messages.create(
-                model="claude-sonnet-4-5-20250929",
-                max_tokens=300,
+                model="claude-haiku-4-5-20251001",
+                max_tokens=150,
                 system=system_prompt,
                 messages=messages
             )
@@ -544,4 +544,3 @@ def status():
 @app.route("/")
 def home():
     return {"message": f"{BROKERAGE_NAME} — {BROKERAGE_CITY} — AI Phone System"}
-
