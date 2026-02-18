@@ -12,7 +12,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 import json
-import pytz
+import pyt
 
 load_dotenv()
 
@@ -231,6 +231,7 @@ IMPORTANT — USE THIS INFORMATION TO ANSWER ALL QUESTIONS:
 Communication Guidelines:
 - Keep answers warm, natural, and brief — this is a phone call
 - Speak like a real, knowledgeable person — not a robot
+- NEVER use markdown formatting like asterisks, bold, italics, or bullet points — your responses will be read aloud by a text-to-speech system, and any special characters will be spoken literally
 - Always use the business information above for accurate answers
 - If asked about something you don't know, say: "That's a great question — let me have one of our agents call you right back with those details."
 - IMPORTANT: End responses naturally. Only ask a follow-up question when it makes sense — never robotically repeat "Is there anything else I can help you with?"
@@ -502,6 +503,9 @@ def process_speech():
         return str(response)
 
     ai_answer = ai_agent.answer_question(speech_result, conversation.conversation_history)
+    # Strip markdown characters that TTS would read aloud
+    ai_answer = ai_answer.replace('*', '').replace('#', '').replace('_', ' ')
+    conversation.add_response(ai_answer)
     conversation.add_response(ai_answer)
     response.say(ai_answer, voice='Google.en-US-Neural2-F', language='en-US')
     gather = Gather(input='speech', action=BASE_URL + '/process_speech', speech_timeout='auto', timeout=6)
