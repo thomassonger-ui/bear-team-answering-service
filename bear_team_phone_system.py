@@ -195,7 +195,7 @@ class ConversationManager:
         self.conversation_history.append({"role": "assistant", "content": response})
 
     def should_escalate(self):
-        return self.attempt_count >= 3
+        return self.attempt_count >= 8
 
     def get_agent_for_intent(self):
         if self.caller_intent == 'seller':
@@ -482,44 +482,43 @@ def process_speech():
         return str(response)
     conversation.add_question(speech_result)
 
-    is_appointment_request = any(w in speech_result.lower() for w in
-        ['appointment', 'schedule', 'showing', 'show me', 'meeting', 'book', 'consultation', 'speak with', 'talk to', 'see the house', 'see the home', 'visit'])
-
-    if conversation.should_escalate():
-        agent = conversation.get_agent_for_intent()
-        if is_appointment_request or any(w in q.lower() for q in conversation.caller_questions for w in
-                ['appointment', 'schedule', 'showing', 'consultation', 'book']):
-            slots = get_available_slots(days_ahead=5)
-            if slots:
-                booked_slot = slots[0]
-                book_appointment(caller_id, booked_slot, agent, conversation.caller_intent)
-                send_lead_email(conversation, agent, booked_slot)
-                slot_text = booked_slot.strftime('%A, %B %d at %I:%M %p Eastern')
-                agent_name = agent['name'] if agent else "one of our agents"
-                response.say(f"I've scheduled that for you on {slot_text}. {agent_name} will call you to confirm. Thanks for calling Bear Team Real Estate!", voice='Google.en-US-Neural2-F')
-            else:
-                send_lead_email(conversation, agent)
-                agent_name = agent['name'] if agent else "one of our agents"
-                response.say(f"I have your information. {agent_name} will call you shortly to schedule a time. Thanks for calling Bear Team Real Estate!", voice='Google.en-US-Neural2-F')
-        else:
-            send_lead_email(conversation, agent)
-            response.say("Let me have one of our agents follow up with you shortly. Thanks for calling Bear Team Real Estate!", voice='Google.en-US-Neural2-F')
-            response.record(action=BASE_URL + '/handle_voicemail', max_length=60,
-                           transcribe=True, transcribe_callback=BASE_URL + '/handle_transcription')
-            return str(response)
-        response.hangup()
-        return str(response)
-
+    # Let the AI handle the conversation naturally — it will ask for name, number, and appointment time
     ai_answer = ai_agent.answer_question(speech_result, conversation.conversation_history)
     # Strip ALL markdown/formatting characters that TTS would read aloud
     import re
     ai_answer = re.sub(r'[*#_~`\[\]()>]', '', ai_answer)
     ai_answer = re.sub(r'\s+', ' ', ai_answer).strip()
     conversation.add_response(ai_answer)
+
+    # Check if caller wants to end the call
+    goodbye_words = ['bye', 'goodbye', 'thank you', 'thanks', 'that is all', "that's all", 'no thanks', 'nothing else', 'have a good day']
+    is_goodbye = any(w in speech_result.lower() for w in goodbye_words)
+
+    if is_goodbye or conversation.should_escalate():
+        # Conversation is wrapping up — send lead email and book if possible
+        agent = conversation.get_agent_for_intent()
+        has_appointment_mention = any(w in q.lower() for q in conversation.caller_questions for w in
+            ['appointment', 'schedule', 'showing', 'consultation', 'book', 'meeting', 'visit', 'come in'])
+        if has_appointment_mention:
+            slots = get_available_slots(days_ahead=5)
+            if slots:
+                booked_slot = slots[0]
+                book_appointment(caller_id, booked_slot, agent, conversation.caller_intent)
+                send_lead_email(conversation, agent, booked_slot)
+            else:
+                send_lead_email(conversation, agent)
+        else:
+            send_lead_email(conversation, agent)
+        response.say(ai_answer, voice='Google.en-US-Neural2-F', language='en-US')
+        response.say("Thanks for calling Bear Team Real Estate! Have a great day!", voice='Google.en-US-Neural2-F')
+        response.hangup()
+        return str(response)
+
+    # Continue the conversation — let AI keep talking to the caller
     response.say(ai_answer, voice='Google.en-US-Neural2-F', language='en-US')
-    gather = Gather(input='speech', action=BASE_URL + '/process_speech', speech_timeout='auto', timeout=6)
+    gather = Gather(input='speech', action=BASE_URL + '/process_speech', speech_timeout='auto', timeout=8)
     response.append(gather)
-    response.say("Thanks for calling Bear Team Real Estate! Have a great day!", voice='Google.en-US-Neural2-F')
+    response.say("Are you still there? If not, thanks for calling Bear Team Real Estate!", voice='Google.en-US-Neural2-F')
     response.hangup()
     return str(response)
 
@@ -545,3 +544,4 @@ def status():
 @app.route("/")
 def home():
     return {"message": f"{BROKERAGE_NAME} — {BROKERAGE_CITY} — AI Phone System"}
+
