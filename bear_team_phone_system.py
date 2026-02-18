@@ -13,6 +13,7 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 import json
 import pytz
+import re
 
 load_dotenv()
 
@@ -252,7 +253,7 @@ Do NOT ad-lib. Do NOT add extra information. Just follow the steps above."""
 
         try:
             response = anthropic_client.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model="claude-sonnet-4-5-20250929",
                 max_tokens=150,
                 system=system_prompt,
                 messages=messages
@@ -465,7 +466,6 @@ def process_speech():
     # Let the AI handle the conversation naturally — it will ask for name, number, and appointment time
     ai_answer = ai_agent.answer_question(speech_result, conversation.conversation_history)
     # Strip ALL markdown/formatting characters that TTS would read aloud
-    import re
     ai_answer = re.sub(r'[*#_~`\[\]()>]', '', ai_answer)
     ai_answer = re.sub(r'\s+', ' ', ai_answer).strip()
     conversation.add_response(ai_answer)
@@ -525,22 +525,5 @@ def status():
 def home():
     return {"message": f"{BROKERAGE_NAME} — {BROKERAGE_CITY} — AI Phone System"}
 
-Progress
-Strengthen the system prompt and text cleanup
-Update AI to collect name, number, and appointment time
-Fix escalation logic — increase turns, handle appointments before voicemail
-Tighten prompt — no ad-libbing, strict script for appointment booking
-5
-Pushing to GitHub
 
-Working folder
-
-bear_team_phone_system.py
-
-Scratchpad
-
-Context
-Connectors
-Google Drive
-Gmail
 
