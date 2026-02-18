@@ -1,0 +1,5 @@
+venv/
+.env
+__pycache__/
+*.pyc
+worldteach-phone-597cdb70d3e8.json
