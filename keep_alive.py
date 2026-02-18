@@ -4,8 +4,7 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
-BASE_URL = os.environ.get('BASE_URL', 'https://bear-team-real-estate.onrender.com')
-
+BASE_URL = os.environ.get('BASE_URL', 'https://bear-team-answering-service.onrender.com')
 def ping():
     try:
         response = requests.get(BASE_URL + '/status', timeout=10)
