@@ -12,7 +12,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 import json
-import pyt
+import pytz
 
 load_dotenv()
 
@@ -225,13 +225,15 @@ class AIAgent:
 
         system_prompt = f"""You are a friendly and professional receptionist for Bear Team Real Estate in Orlando, Florida.
 
+CRITICAL FORMATTING RULE: Your response will be read aloud word-for-word by a text-to-speech phone system. You must NEVER use asterisks, markdown, bold, italics, bullet points, numbered lists, hashtags, underscores, or any special formatting characters. Write plain conversational sentences only. If you put an asterisk around a word like *buying*, the phone system will literally say "asterisk buying asterisk" to the caller.
+
 IMPORTANT — USE THIS INFORMATION TO ANSWER ALL QUESTIONS:
 {BUSINESS_KNOWLEDGE}
 
 Communication Guidelines:
 - Keep answers warm, natural, and brief — this is a phone call
 - Speak like a real, knowledgeable person — not a robot
-- NEVER use markdown formatting like asterisks, bold, italics, or bullet points — your responses will be read aloud by a text-to-speech system, and any special characters will be spoken literally
+- Write in plain spoken English only — no formatting of any kind
 - Always use the business information above for accurate answers
 - If asked about something you don't know, say: "That's a great question — let me have one of our agents call you right back with those details."
 - IMPORTANT: End responses naturally. Only ask a follow-up question when it makes sense — never robotically repeat "Is there anything else I can help you with?"
@@ -503,9 +505,10 @@ def process_speech():
         return str(response)
 
     ai_answer = ai_agent.answer_question(speech_result, conversation.conversation_history)
-    # Strip markdown characters that TTS would read aloud
-    ai_answer = ai_answer.replace('*', '').replace('#', '').replace('_', ' ')
-    conversation.add_response(ai_answer)
+    # Strip ALL markdown/formatting characters that TTS would read aloud
+    import re
+    ai_answer = re.sub(r'[*#_~`\[\]()>]', '', ai_answer)
+    ai_answer = re.sub(r'\s+', ' ', ai_answer).strip()
     conversation.add_response(ai_answer)
     response.say(ai_answer, voice='Google.en-US-Neural2-F', language='en-US')
     gather = Gather(input='speech', action=BASE_URL + '/process_speech', speech_timeout='auto', timeout=6)
