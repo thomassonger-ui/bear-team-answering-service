@@ -432,6 +432,77 @@ def send_voicemail_email(conversation, voicemail_text):
                   conversation.get_full_conversation(), '', voicemail_text)
     send_email(f"Bear Team — Voicemail from {conversation.caller_id}", body)
 
+# ── Time Parsing Helper ──
+
+def parse_requested_time(caller_questions):
+    """Parse a day and time from what the caller said during the conversation."""
+    # Only look at the last few messages where scheduling was likely discussed
+    recent_text = " ".join(caller_questions[-4:]).lower()
+
+    now = datetime.now(EASTERN)
+    target_date = None
+
+    day_map = {'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3,
+               'friday': 4, 'saturday': 5, 'sunday': 6}
+
+    if 'today' in recent_text:
+        target_date = now.date()
+    elif 'tomorrow' in recent_text:
+        target_date = (now + timedelta(days=1)).date()
+    else:
+        for day_name, day_num in day_map.items():
+            if day_name in recent_text:
+                days_ahead = (day_num - now.weekday()) % 7
+                if days_ahead == 0:
+                    days_ahead = 7  # Next week if today
+                target_date = (now + timedelta(days=days_ahead)).date()
+                break
+
+    if not target_date:
+        return None
+
+    # Find the time — look for patterns near time-related context
+    # Match "at 5", "5:00 PM", "5 PM", "5 o'clock", "at 2:30 pm"
+    target_hour = 10  # Default to 10 AM
+    target_minute = 0
+
+    # First try to match time with AM/PM (most reliable)
+    time_match = re.search(r'(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)', recent_text)
+    if not time_match:
+        # Try "at 5" or "at 5:00" or "5 o'clock" patterns (no AM/PM)
+        time_match = re.search(r'(?:at\s+)(\d{1,2})(?::(\d{2}))?(?:\s*o.?clock)?', recent_text)
+    if not time_match:
+        # Try patterns like "monday 5" or "tuesday 3:30"
+        day_names = '|'.join(day_map.keys())
+        time_match = re.search(r'(?:' + day_names + r')\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?', recent_text)
+
+    if time_match:
+        hour = int(time_match.group(1))
+        minute = int(time_match.group(2)) if time_match.group(2) else 0
+        ampm = time_match.group(3) if time_match.lastindex >= 3 else None
+
+        if ampm and ('pm' in ampm or 'p.m' in ampm):
+            if hour != 12:
+                hour += 12
+        elif ampm and ('am' in ampm or 'a.m' in ampm):
+            if hour == 12:
+                hour = 0
+        else:
+            # No AM/PM — assume PM for 1-6, AM for 7-11
+            if 1 <= hour <= 6:
+                hour += 12
+
+        target_hour = hour
+        target_minute = minute
+
+    try:
+        slot = EASTERN.localize(datetime(target_date.year, target_date.month, target_date.day,
+                                         target_hour, target_minute))
+        return slot
+    except Exception as e:
+        print(f"Time parse error: {e}")
+        return None
+
 # ── Flask Routes ──
 
 @app.route("/voice", methods=['GET', 'POST'])
@@ -475,19 +546,15 @@ def process_speech():
     is_goodbye = any(w in speech_result.lower() for w in goodbye_words)
 
     if is_goodbye or conversation.should_escalate():
-        # Conversation is wrapping up — send lead email and book if possible
+        # Conversation is wrapping up — send lead email and book appointment
         agent = conversation.get_agent_for_intent()
-        has_appointment_mention = any(w in q.lower() for q in conversation.caller_questions for w in
-            ['appointment', 'schedule', 'showing', 'consultation', 'book', 'meeting', 'visit', 'come in'])
-        if has_appointment_mention:
-            slots = get_available_slots(days_ahead=5)
-            if slots:
-                booked_slot = slots[0]
-                book_appointment(caller_id, booked_slot, agent, conversation.caller_intent)
-                send_lead_email(conversation, agent, booked_slot)
-            else:
-                send_lead_email(conversation, agent)
+        # Try to parse a requested day/time from the conversation
+        booked_slot = parse_requested_time(conversation.caller_questions)
+        if booked_slot:
+            book_appointment(caller_id, booked_slot, agent, conversation.caller_intent)
+            send_lead_email(conversation, agent, booked_slot)
         else:
+            # No specific time found — just send the lead email
             send_lead_email(conversation, agent)
         response.say(ai_answer, voice='Google.en-US-Neural2-F', language='en-US')
         response.say("Thanks for calling Bear Team Real Estate! Have a great day!", voice='Google.en-US-Neural2-F')
@@ -523,6 +590,9 @@ def status():
 
 @app.route("/")
 def home():
+    return {"message": f"{BROKERAGE_NAME} — {BROKERAGE_CITY} — AI Phone System"}
+
+
     return {"message": f"{BROKERAGE_NAME} — {BROKERAGE_CITY} — AI Phone System"}
 
 
